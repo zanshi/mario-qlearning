@@ -24,7 +24,7 @@ src/amico/python/PyJava/build/
 
 # Gradle:
 .idea/**/gradle.xml
-.idea/**/libraries
+#.idea/**/libraries
 
 # CMake
 cmake-build-debug/
