@@ -2,7 +2,7 @@ package tnm095;
 
 import ch.idsia.agents.Agent;
 import ch.idsia.agents.LearningAgent;
-import ch.idsia.agents.controllers.BasicMarioAIAgent;
+import ch.idsia.benchmark.mario.environments.Environment;
 import ch.idsia.benchmark.tasks.LearningTask;
 
 import java.util.Arrays;
@@ -12,7 +12,8 @@ import java.util.Random;
 /**
  * Created by Niclas Olmenius on 2017-09-25.
  */
-public class QLearningAgent extends BasicMarioAIAgent implements LearningAgent {
+public class QLearningAgent implements LearningAgent {
+
 
     // Relevant data structures
     private class QState {
@@ -43,11 +44,30 @@ public class QLearningAgent extends BasicMarioAIAgent implements LearningAgent {
     // Member variables
 
     // Mario AI
-    private float[] prevPos;
+    private int receptiveFieldWidth;
+    private int receptiveFieldHeight;
+    private int marioEgoRow;
+    private int marioEgoCol;
+
+    int zLevelScene = 1;
+    int zLevelEnemies = 0;
+
+    private byte[][] levelScene;
+    protected byte[][] enemies;
+    protected byte[][] mergedObservation;
+
+    protected float[] marioFloatPos = null;
+    protected float[] enemiesFloatPos = null;
+
+    protected int[] marioState = null;
+
+    private float[] prevMarioFloatPos;
+    private float[] prevEnemiesFloatPos;
     private boolean killed;
     private boolean killedWithFire;
     private boolean killedWithStomp;
     private boolean killedWithShell;
+    private String name;
 
     LearningTask task;
     long evalQuota;
@@ -66,10 +86,13 @@ public class QLearningAgent extends BasicMarioAIAgent implements LearningAgent {
 
     QState currState;
 
+    QStateAction oldQStateAction;
+
+
     // -----------------------------------------------
     // Ctor
     public QLearningAgent() {
-        super("Q-Learning Agent");
+        setName("Q-Learning Agent");
         QTable = new Hashtable<>();
         alpha = 0.3f;
         gamma = 0.75f;
@@ -103,12 +126,12 @@ public class QLearningAgent extends BasicMarioAIAgent implements LearningAgent {
         // 7: South east
         // 8: South
 
-        if (prevPos == null || (Arrays.equals(prevPos, marioFloatPos))) {
+        if (prevMarioFloatPos == null || (Arrays.equals(prevMarioFloatPos, marioFloatPos))) {
             return 0; // Still
         }
 
-        float dx = marioFloatPos[0] - prevPos[0];
-        float dy = marioFloatPos[1] - prevPos[1];
+        float dx = marioFloatPos[0] - prevMarioFloatPos[0];
+        float dy = marioFloatPos[1] - prevMarioFloatPos[1];
 
         if (dx < 0 && dy < 0) {
             return 1;
@@ -162,39 +185,81 @@ public class QLearningAgent extends BasicMarioAIAgent implements LearningAgent {
     // TODO
     private QAction getBestAction(QState state) {
 
+        // Loop over every action for the input state
+        // return the action that gives the highest Q-value
+
         return new QAction();
     }
 
-    // TODO
     @Override
-    public boolean[] getAction() {
+    public void integrateObservation(Environment environment) {
+        levelScene = environment.getLevelSceneObservationZ(zLevelScene);
+        enemies = environment.getEnemiesObservationZ(zLevelEnemies);
+        mergedObservation = environment.getMergedObservationZZ(1, 0);
 
-        QState state = getCurrentState();
+        this.marioFloatPos = environment.getMarioFloatPos();
+        this.enemiesFloatPos = environment.getEnemiesFloatPos();
+        this.marioState = environment.getMarioState();
+
+        QState newState = getCurrentState(); // New state
+        float reward = getReward(newState); //
+
         QAction action;
 
         // Should a random action be taken?
         if (random.nextFloat() < rho) {
             action = getRandomAction();
         } else {
-            action = getBestAction(state);
+            action = getBestAction(newState);
         }
 
-        // Pseudo code from Artificial Intelligence for Games
 
-        // Q = getQValue(state, action)
-        // maxQ =
-        // Q = ( 1 - alpha) * Q + alpha * (reward + gamma * maxQ)
-        // storeQValue(state, action, Q)
-        // state = newState
+        QStateAction qStateAction = new QStateAction(newState, action);
+
+        QTable.putIfAbsent(qStateAction, 0.0f); // Add state to table if it is absent
+
+        if (oldQStateAction != null) {
+
+            float oldQ = QTable.get(oldQStateAction);
+            float maxQ = QTable.get(qStateAction);
+            float newQ = (1 - alpha) * oldQ + alpha * (reward + gamma * maxQ);
+
+            QTable.replace(oldQStateAction, newQ);
+        }
+
+        oldQStateAction = qStateAction;
+        prevMarioFloatPos = marioFloatPos;
+        prevEnemiesFloatPos = enemiesFloatPos;
+
+    }
+
+    @Override
+    public void giveIntermediateReward(float intermediateReward) {
+
+    }
+
+    @Override
+    public void setObservationDetails(int rfWidth, int rfHeight, int egoRow, int egoCol) {
+        receptiveFieldWidth = rfWidth;
+        receptiveFieldHeight = rfHeight;
+
+        marioEgoRow = egoRow;
+        marioEgoCol = egoCol;
+    }
 
 
-        return action.actions;
+    // TODO
+    @Override
+    public boolean[] getAction() {
+
+        return oldQStateAction.qAction.actions;
+
     }
 
     // TODO
     @Override
     public void reset() {
-        super.reset();
+
     }
 
     /**
@@ -244,5 +309,29 @@ public class QLearningAgent extends BasicMarioAIAgent implements LearningAgent {
     @Override
     public void init() {
 
+    }
+
+    public int getEnemiesCellValue(int x, int y) {
+        if (x < 0 || x >= levelScene.length || y < 0 || y >= levelScene[0].length)
+            return 0;
+
+        return enemies[x][y];
+    }
+
+    public int getReceptiveFieldCellValue(int x, int y) {
+        if (x < 0 || x >= levelScene.length || y < 0 || y >= levelScene[0].length)
+            return 0;
+
+        return levelScene[x][y];
+    }
+
+    @Override
+    public String getName() {
+        return name;
+    }
+
+    @Override
+    public void setName(String name) {
+        this.name = name;
     }
 }
