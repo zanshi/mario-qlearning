@@ -48,6 +48,7 @@ public class QLearningAgent extends BasicMarioAIAgent implements LearningAgent {
     private boolean killedWithFire;
     private boolean killedWithStomp;
     private boolean killedWithShell;
+    private int prevKillsTotal;
 
     LearningTask task;
     long evalQuota;
@@ -80,6 +81,8 @@ public class QLearningAgent extends BasicMarioAIAgent implements LearningAgent {
         killedWithStomp = false;
         killedWithShell = false;
 
+        prevKillsTotal = 0;
+
         reset();
     }
 
@@ -91,7 +94,7 @@ public class QLearningAgent extends BasicMarioAIAgent implements LearningAgent {
 
         // Define weights
         float[] weights = new float[nStates];
-        Array.fill(weights,1.f/nStates);
+        Arrays.fill(weights,1.f/(float)nStates);
 
         // Calculate delta distance
         float dx = marioFloatPos[0] - prevPos[0];
@@ -101,7 +104,7 @@ public class QLearningAgent extends BasicMarioAIAgent implements LearningAgent {
         if (getEnemiesCellValue(marioEgoRow, marioEgoCol) != 0) { // colliding with enemy
             movementReward = -1.f;
         } else if (dx*dx + dy*dy < 0.00001f) { // being stuck
-            movementReward = -0.5;
+            movementReward = -0.5f;
         } else if (dx > 0.f && (getEnemiesCellValue(marioEgoRow, marioEgoCol+1) != 0 || 
         getEnemiesCellValue(marioEgoRow, marioEgoCol+2) != 0)) { // moving forward when enemy is present
             movementReward = -0.25f;
@@ -114,6 +117,11 @@ public class QLearningAgent extends BasicMarioAIAgent implements LearningAgent {
         for(int i = 0; i < nStates; i++) {
             reward += weights[i] * states[i];
         }
+
+        // Add reward for kills
+        float killWeight = 0.5f;
+        reward += (getKillsTotal - prevKillsTotal) * killWeight;
+
         return reward;
     }
 
