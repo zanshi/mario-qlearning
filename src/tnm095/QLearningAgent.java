@@ -36,6 +36,7 @@ public class QLearningAgent extends BasicMarioAIAgent implements LearningAgent {
 
         QState qState;
         QAction qAction;
+        int repetitions = 0; // # of times action a performed in s
 
     }
 
@@ -198,6 +199,10 @@ public class QLearningAgent extends BasicMarioAIAgent implements LearningAgent {
     private QAction getBestAction(QState state) {
 
         return new QAction();
+    }
+
+    private float getLearningRate(QStateAction stateAction){
+        return alpha / stateAction.repetitions;
     }
 
     // TODO
