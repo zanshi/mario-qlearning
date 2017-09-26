@@ -83,11 +83,38 @@ public class QLearningAgent extends BasicMarioAIAgent implements LearningAgent {
         reset();
     }
 
-    // TODO
+    // TODO: Tweak weights
     // Reward function. Weighted value based on the input state.
     private float getReward(QState state) {
+        int[] states = state.states;
+        int nStates = states.length;
 
-        return 0.0f;
+        // Define weights
+        float[] weights = new float[nStates];
+        Array.fill(weights,1.f/nStates);
+
+        // Calculate delta distance
+        float dx = marioFloatPos[0] - prevPos[0];
+        float dy = marioFloatPos[1] - prevPos[1];
+
+        float movementReward;
+        if (getEnemiesCellValue(marioEgoRow, marioEgoCol) != 0) { // colliding with enemy
+            movementReward = -1.f;
+        } else if (dx*dx + dy*dy < 0.00001f) { // being stuck
+            movementReward = -0.5;
+        } else if (dx > 0.f && (getEnemiesCellValue(marioEgoRow, marioEgoCol+1) != 0 || 
+        getEnemiesCellValue(marioEgoRow, marioEgoCol+2) != 0)) { // moving forward when enemy is present
+            movementReward = -0.25f;
+        } else {
+            movementReward = dx + dy;
+        }
+
+        // Calculate reward
+        float reward = movementReward * 1.f; // some arbitrary weight
+        for(int i = 0; i < nStates; i++) {
+            reward += weights[i] * states[i];
+        }
+        return reward;
     }
 
     private int calculateDirection() {
