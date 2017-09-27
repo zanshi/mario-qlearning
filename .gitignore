@@ -1,4 +1,5 @@
 *.pyc
+*.zip
 
 # project directories
 src/amico/python/JavaPy/build/
