@@ -2,9 +2,11 @@ package tnm095;
 
 import ch.idsia.agents.Agent;
 import ch.idsia.agents.LearningAgent;
+import ch.idsia.benchmark.mario.engine.sprites.Mario;
 import ch.idsia.benchmark.mario.environments.Environment;
 import ch.idsia.benchmark.tasks.LearningTask;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Hashtable;
 import java.util.Random;
@@ -75,6 +77,8 @@ public class QLearningAgent implements LearningAgent {
     LearningTask task;
     long evalQuota;
 
+    ArrayList<boolean[]> keyCombinations;
+
     // Q-learning
     public static final Random random = new Random();
     private Hashtable<QStateAction, Float> QTable;
@@ -107,6 +111,8 @@ public class QLearningAgent implements LearningAgent {
         killedWithShell = false;
 
         prevKillsTotal = 0;
+
+        keyCombinations = buildKeyCombinations();
 
         reset();
     }
@@ -225,7 +231,35 @@ public class QLearningAgent implements LearningAgent {
         // Loop over every action for the input state
         // return the action that gives the highest Q-value
 
+        boolean[] jumpUp = new boolean[Environment.numberOfKeys];
+        jumpUp[Mario.KEY_JUMP] = true;
+
+        QAction action;
+        for (int i = 0; i < 32; i++) {
+            action = new QAction();
+
+        }
+
+
         return new QAction();
+    }
+
+
+    private ArrayList<boolean[]> buildKeyCombinations() {
+        ArrayList<boolean[]> keyCombinations = new ArrayList<>();
+
+        int n = Environment.numberOfKeys;
+        int m = 32;
+
+        for (int x = 0; x < m; x++) {
+            boolean[] b = new boolean[n - 1];
+            for (int i = 0; i < n - 1; i++) b[i] = (1 << n - 1 - i - 1 & x) != 0;
+            boolean[] b2 = Arrays.copyOf(b, 6);
+            keyCombinations.add(b2);
+        }
+
+        return keyCombinations;
+
     }
 
     private float getLearningRate(QStateAction stateAction) {
@@ -248,6 +282,7 @@ public class QLearningAgent implements LearningAgent {
 
         // ----------------
         // Q-learning
+
         QState newState = getCurrentState(); // New state
         float reward = getReward(newState); //
 
