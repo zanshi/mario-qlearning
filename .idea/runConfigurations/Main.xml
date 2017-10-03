@@ -1,9 +1,9 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Main" type="Application" factoryName="Application">
     <extension name="coverage" enabled="false" merge="false" sample_coverage="true" runner="idea" />
-    <option name="MAIN_CLASS_NAME" value="ch.idsia.scenarios.champ.GamePlayTrack" />
+    <option name="MAIN_CLASS_NAME" value="ch.idsia.scenarios.champ.LearningTrack" />
     <option name="VM_PARAMETERS" value="" />
-    <option name="PROGRAM_PARAMETERS" value="-ag competition.gic2010.gameplay.sergeykarakovskiy.SergeyKarakovskiy_ForwardAgent -rec SergeyKarakovskiy_ForwardAgent -vis on" />
+    <option name="PROGRAM_PARAMETERS" value="-ag tnm095.QLearningAgent -vis on -fps 24" />
     <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$" />
     <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
     <option name="ALTERNATIVE_JRE_PATH" />
