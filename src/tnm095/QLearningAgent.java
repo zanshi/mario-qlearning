@@ -223,7 +223,7 @@ public class QLearningAgent implements LearningAgent {
 
         // Add reward for kills
         float killWeight = 5.f;
-        reward +=  nKills * killWeight;
+        reward += nKills * killWeight;
 
         //System.out.println(learningTask.getEnvironment().getEvaluationInfo().marioMode);
 
@@ -357,7 +357,7 @@ public class QLearningAgent implements LearningAgent {
 
         if (obj == GeneralizerLevelScene.COIN_ANIM || obj == GeneralizerLevelScene.PRINCESS) {
             return 0;
-        } else if(obj != 0){
+        } else if (obj != 0) {
             return 1;
         }
         return obj;
@@ -575,7 +575,7 @@ public class QLearningAgent implements LearningAgent {
                 nDeaths++;
                 //System.out.print("RIP Mario 2017. Time left: " + eval.timeLeft);
             }
-            System.out.println("Wins: " + 100.f*(float)wins/(float)(i+1) + "%, Deaths: " + 100.f*(float)nDeaths/(float)(i+1) + "%, Times up: " + 100.f*(float)nTimesup/(float)(i+1) + "%");
+            System.out.println("Wins: " + 100.f * (float) wins / (float) (i + 1) + "%, Deaths: " + 100.f * (float) nDeaths / (float) (i + 1) + "%, Times up: " + 100.f * (float) nTimesup / (float) (i + 1) + "%");
         }
 
         System.out.println("Percentage won: " + (float) wins / (float) N);
