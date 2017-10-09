@@ -8,27 +8,30 @@ import ch.idsia.benchmark.mario.environments.Environment;
 import ch.idsia.benchmark.tasks.LearningTask;
 import ch.idsia.tools.EvaluationInfo;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Random;
 
 /**
  * Created by Niclas Olmenius on 2017-09-25.
  */
 public class QLearningAgent implements LearningAgent {
 
-
     // Q-learning
     public static final Random random = new Random();
-    private final int nrStates = 10;
+    private final int nrStates = 11;
+    private final int nrActions = 32;
     protected byte[][] enemies;
     protected byte[][] mergedObservation;
     // -----------------------------------------------
     // Member variables
+
     protected float[] marioFloatPos;
     protected float[] enemiesFloatPos;
     protected int[] marioState = null;
     int zLevelScene = 2;
     int zLevelEnemies = 2;
-    QState currState;
     //    QStateAction oldQStateAction;
     // Mario AI
     private int receptiveFieldWidth;
@@ -43,25 +46,26 @@ public class QLearningAgent implements LearningAgent {
     private boolean killedWithShell;
     private String name;
     private int killsTotal;
+    private int prevMarioMode;
     private int prevKillsTotal;
     private LearningTask task;
     private long evalQuota;
-    private ArrayList<QAction> keyCombinations;
+    private ArrayList<boolean[]> actionList;
     private HashMap<QState, QActions> QTable;
     private QState prevS;
-    private QAction prevA;
-    private float oldQ;
-    private float prevR;
     private float alpha;
+    private float alpha0;
     private float gamma;
     private float rho;
+    private int prevActionIdx;
 
     // -----------------------------------------------
     // Ctor
     public QLearningAgent() {
         setName("Q-Learning Agent");
-        QTable = new HashMap<>(20000);
-        alpha = 0.15f;
+        QTable = new HashMap<>();
+        alpha0 = 0.8f;
+        alpha = 0.10f;
         gamma = 0.6f;
         rho = 0.3f;
 
@@ -77,18 +81,47 @@ public class QLearningAgent implements LearningAgent {
         marioFloatPos[1] = 0;
         prevMarioFloatPos[0] = 0;
         prevMarioFloatPos[1] = 0;
+        prevMarioMode = 2; //
 
-        prevS = new QState(new int[nrStates]);
-        prevA = new QAction(new boolean[32]);
-
-        keyCombinations = buildKeyCombinations();
+        actionList = buildKeyCombinations();
+        prevActionIdx = -1;
 
         reset();
+    }
+
+
+    private QState getCurrentState() {
+
+        int[] s = new int[nrStates];
+        s[0] = marioState[1]; // Small, big or fire
+        s[1] = calculateDirection(); // Direction expressed as an integer
+        s[2] = marioState[2]; // On ground?
+        s[3] = marioState[3]; // Able to jump?
+        s[4] = nearbyDanger() ? 1 : 0;
+        s[5] = isStuck() ? 1 : 0;
+        s[6] = nearbyObstacle();
+        s[7] = midrangeEnemies();
+        s[8] = longRangeEnemies();
+        s[9] = (killsTotal - prevKillsTotal) > 0 ? 1 : 0; // killed something previous frame
+
+        float dx = marioFloatPos[0] - prevMarioFloatPos[0];
+        float dy = marioFloatPos[1] - prevMarioFloatPos[1];
+        if (dx > 2.2f) {
+            s[10] = 2; // Going fast
+        } else if (dx > 1.5f) {
+            s[10] = 1; // Medium speed
+        } else {
+            s[10] = 0; // Slow
+        }
+
+        return new QState(s);
+
     }
 
     // TODO: Tweak weights
     // Reward function. Weighted value based on the input state.
     private float getReward(QState state) {
+
 
 //        int[] s = new int[10];
 //        s[0] = marioState[1]; // Small, big or fire
@@ -124,8 +157,25 @@ public class QLearningAgent implements LearningAgent {
             reward += -0.4;
         }
 
+        // Punish getting hit
+        if (prevMarioMode != rawState[0]) {
+            reward += -0.8;
+        }
 
-        return reward * 20;
+        if (rawState[4] != 1) {
+//            System.out.println("no nearby enemies");
+            // Reward going fast
+            if (rawState[10] == 2) {
+                reward += 0.9;
+            } else if (rawState[10] == 1) {
+                reward += 0.6;
+            }
+        } else {
+//            System.out.println("nearby enemies!");
+        }
+
+
+        return reward;
     }
 
     private int calculateDirection() {
@@ -212,7 +262,8 @@ public class QLearningAgent implements LearningAgent {
         float dx = marioFloatPos[0] - prevMarioFloatPos[0];
         float dy = marioFloatPos[1] - prevMarioFloatPos[1];
 
-        return (dx * dx + dy * dy < 0.001f);
+//        return (dx * dx + dy * dy < 0.001f);
+        return dx * dx < 0.01f;
     }
 
     private int nearbyObstacle() {
@@ -239,37 +290,17 @@ public class QLearningAgent implements LearningAgent {
         return obj;
     }
 
-    private QState getCurrentState() {
 
-        int[] s = new int[nrStates];
-        s[0] = marioState[1]; // Small, big or fire
-        s[1] = calculateDirection(); // Direction expressed as an integer
-        s[2] = marioState[2]; // On ground?
-        s[3] = marioState[3]; // Able to jump?
-//        s[4] = getEnemiesCellValue(marioEgoRow, marioEgoCol);
-        s[4] = nearbyDanger() ? 1 : 0;
-        s[5] = isStuck() ? 1 : 0;
-        s[6] = nearbyObstacle();
-        s[7] = midrangeEnemies();
-        s[8] = longRangeEnemies();
-        s[9] = (killsTotal - prevKillsTotal) > 0 ? 1 : 0; // killed something previous frame
-
-
-        return new QState(s);
-
-    }
-
-    private ArrayList<QAction> buildKeyCombinations() {
-        ArrayList<QAction> keyCombinations = new ArrayList<>();
+    private ArrayList<boolean[]> buildKeyCombinations() {
+        ArrayList<boolean[]> keyCombinations = new ArrayList<>();
 
         int n = Environment.numberOfKeys;
-        int m = 32;
 
-        for (int x = 0; x < m; x++) {
+        for (int x = 0; x < nrActions; x++) {
             boolean[] b = new boolean[n - 1];
             for (int i = 0; i < n - 1; i++) b[i] = (1 << n - 1 - i - 1 & x) != 0;
             boolean[] b2 = Arrays.copyOf(b, 6);
-            keyCombinations.add(new QAction(b2));
+            keyCombinations.add(b2);
         }
 
         return keyCombinations;
@@ -297,45 +328,43 @@ public class QLearningAgent implements LearningAgent {
 
         QState newState = getCurrentState(); // New state
 
-
-//        if (QTable.size() > 100) {
-//            System.out.println("test");
-//        }
+        if (prevS == null) {
+            prevS = newState;
+        }
 
         float reward = getReward(prevS);
 
         QActions actions;
         if (!QTable.containsKey(newState)) {
-            actions = new QActions();
-            QTable.put(newState, actions);
-        } else {
-            actions = QTable.get(newState);
+            QTable.put(newState, new QActions());
         }
+        actions = QTable.get(newState);
 
-        QAction newAction;
+        int actionIdx;
         // Should a random action be taken?
         if (random.nextFloat() < rho) {
-            newAction = actions.getRandomAction();
+            actionIdx = actions.getRandomAction();
         } else {
-            newAction = actions.getBestAction();
+            actionIdx = actions.getBestAction();
         }
 
+        if (prevActionIdx != -1) {
+            QActions prevActions = QTable.get(prevS);
+            float oldQ = prevActions.getQ(prevActionIdx);
+            float maxQ = actions.getQ(actionIdx);
+            float alphaTest = alpha0 / prevActions.nrTimesActionPerformed[prevActionIdx];
+//            float alphaTest = alpha;
+//            System.out.println(alphaTest);
+            float newQ = (1 - alphaTest) * oldQ + alphaTest * (reward + gamma * maxQ);
+            prevActions.setQ(prevActionIdx, newQ);
+        }
 
-        float maxQ = actions.getQ(newAction);
-        float newQ = (1 - alpha) * oldQ + alpha * (reward + gamma * maxQ);
-        QActions prevActions = QTable.get(prevS);
-        prevA.Q = newQ;
-        prevActions.replaceAction(prevA);
-
-        QTable.replace(prevS, prevActions);
-
-
-        oldQ = newQ;
         prevS = newState;
-        prevA = newAction;
+        prevActionIdx = actionIdx;
         prevMarioFloatPos = marioFloatPos.clone();
         prevEnemiesFloatPos = enemiesFloatPos.clone();
         prevKillsTotal = killsTotal;
+        prevMarioMode = marioState[0];
 
     }
 
@@ -356,9 +385,11 @@ public class QLearningAgent implements LearningAgent {
     // TODO
     @Override
     public boolean[] getAction() {
-
-        return prevA.actions.clone();
-
+        if (prevActionIdx == -1) {
+            return actionList.get(random.nextInt(nrActions));
+        } else {
+            return actionList.get(prevActionIdx);
+        }
     }
 
     // TODO
@@ -376,15 +407,18 @@ public class QLearningAgent implements LearningAgent {
 
         // Need to use task.evaluate(this) to train
         // Every evaluation updates the QTable
-        int N = 15000;
+        int N = 1000;
         int totalScore = 0;
         int score = 0;
         int wins = 0;
         int lateWins = 0;
         int nDeaths = 0;
         int nTimesup = 0;
+        int iterations = 0;
         for (int i = 0; i < N; i++) {
-//            alpha = 0.1f + 0.6f * (float) Math.exp(-i * 2.71f / N);
+            float scale = (float) Math.exp(-i * Math.E / N);
+            alpha = 0.1f + 0.7f * scale;
+//            rho = 0.1f + 0.2f * scale;
             totalScore += task.evaluate(this);
             //alpha = 0.1f + 0.6f * (float) Math.exp(-i);
             EvaluationInfo eval = task.getEvaluationInfo();
@@ -403,12 +437,14 @@ public class QLearningAgent implements LearningAgent {
                 nDeaths++;
                 //System.out.print("RIP Mario 2017. Time left: " + eval.timeLeft);
             }
-            System.out.println("Wins: " + 100.f * (float) wins / (float) (i + 1) + "%, Deaths: " + 100.f * (float) nDeaths / (float) (i + 1) + "%, Times up: " + 100.f * (float) nTimesup / (float) (i + 1) + "%");
+            System.out.println("Wins: " + 100.f * (float) wins / (float) (i + 1)
+                    + "%, Deaths: " + 100.f * (float) nDeaths / (float) (i + 1)
+                    + "%, Times up: " + 100.f * (float) nTimesup / (float) (i + 1) + "%");
 
         }
 
         System.out.println("Percentage won: " + (float) wins / (float) N);
-        System.out.println("Percentage won late: " + (float) lateWins / (float) 500);
+//        System.out.println("Percentage won late: " + (float) lateWins / (float) 500);
 
         System.out.println(QTable.size());
 
@@ -439,8 +475,8 @@ public class QLearningAgent implements LearningAgent {
 
     @Override
     public Agent getBestAgent() {
-//        alpha = 0;
-//        rho = 0;
+//        alpha0 = 0;
+//        rho = 0.01f;
         return this;
     }
 
@@ -481,10 +517,6 @@ public class QLearningAgent implements LearningAgent {
             states = s;
         }
 
-        public QState(QState newState) {
-            states = newState.states.clone();
-        }
-
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
@@ -503,120 +535,49 @@ public class QLearningAgent implements LearningAgent {
 
     private class QActions {
 
-        ArrayList<QAction> actions;
-        //        boolean actions[];
-        int actionIndex;
-
         float[] qValues;
+        int[] nrTimesActionPerformed;
 
         QActions() {
-            actions = buildKeyCombinations();
+            qValues = new float[nrActions];
+            for (int i = 0; i < nrActions; i++) {
+                qValues[i] = (0.1f * random.nextFloat() - 0.05f) * 2.0f;
+            }
+            nrTimesActionPerformed = new int[nrActions];
         }
 
-        public QActions(QActions qActions) {
-            actions = (ArrayList<QAction>) qActions.actions.clone();
-        }
-
-        public QAction getBestAction() {
+        public int getBestAction() {
 
             float maxQ = Float.NEGATIVE_INFINITY;
             float Q;
-            int bestIdx = 0;
-            for (int i = 0; i < 32; i++) {
-                Q = actions.get(i).Q;
+            int bestIdx = -1;
+            for (int i = 0; i < nrActions; i++) {
+                Q = qValues[i];
                 if (Q > maxQ) {
                     maxQ = Q;
                     bestIdx = i;
                 }
             }
-            return new QAction(actions.get(bestIdx));
+            nrTimesActionPerformed[bestIdx]++;
+            return bestIdx;
         }
 
-        public float getQ(QAction action) {
-            return actions.get(actions.indexOf(action)).Q;
+        public float getQ(int idx) {
+            return qValues[idx];
         }
 
 
-        public void replaceAction(QAction action) {
-            actions.set(actions.indexOf(action), action);
+        public void setQ(int idx, float newQ) {
+            qValues[idx] = newQ;
         }
 
-        public QAction getRandomAction() {
-            return new QAction(actions.get(random.nextInt(32)));
+
+        public int getRandomAction() {
+            int rndIdx = random.nextInt(nrActions);
+            nrTimesActionPerformed[rndIdx]++;
+            return rndIdx;
         }
 
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-
-            QActions qActions = (QActions) o;
-
-            return actions.equals(qActions.actions);
-        }
-
-        @Override
-        public int hashCode() {
-            return actions.hashCode();
-        }
     }
 
-    private class QAction {
-        boolean[] actions;
-        float Q;
-
-        QAction(boolean[] a) {
-            actions = a;
-            Q = 0;
-        }
-
-        public QAction(QAction action) {
-            actions = action.actions.clone();
-            Q = action.Q;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-
-            QAction qAction = (QAction) o;
-
-            return Arrays.equals(actions, qAction.actions);
-        }
-
-        @Override
-        public int hashCode() {
-            int result = Arrays.hashCode(actions);
-            return result;
-        }
-    }
-
-//    private class QStateAction {
-//        QState qState;
-//        QAction qAction;
-//
-//        QStateAction(QState q, QAction a) {
-//            qState = q;
-//            qAction = a;
-//        }
-//
-//        @Override
-//        public boolean equals(Object o) {
-//            if (this == o) return true;
-//            if (o == null || getClass() != o.getClass()) return false;
-//
-//            QStateAction that = (QStateAction) o;
-//
-//            if (!qState.equals(that.qState)) return false;
-//            return qAction.equals(that.qAction);
-//        }
-//
-//        @Override
-//        public int hashCode() {
-//            int result = qState.hashCode();
-//            result = 31 * result + qAction.hashCode();
-//            return result;
-//        }
-//    }
 }
