@@ -18,9 +18,9 @@ public class QLearningAgent implements LearningAgent {
 
     // Q-learning
     public static final Random random = new Random();
+    private final int nrStates = 10;
     protected byte[][] enemies;
     protected byte[][] mergedObservation;
-
     // -----------------------------------------------
     // Member variables
     protected float[] marioFloatPos;
@@ -44,10 +44,8 @@ public class QLearningAgent implements LearningAgent {
     private String name;
     private int killsTotal;
     private int prevKillsTotal;
-
     private LearningTask task;
     private long evalQuota;
-
     private ArrayList<QAction> keyCombinations;
     private HashMap<QState, QActions> QTable;
     private QState prevS;
@@ -80,6 +78,8 @@ public class QLearningAgent implements LearningAgent {
         prevMarioFloatPos[0] = 0;
         prevMarioFloatPos[1] = 0;
 
+        prevS = new QState(new int[nrStates]);
+        prevA = new QAction(new boolean[32]);
 
         keyCombinations = buildKeyCombinations();
 
@@ -241,7 +241,7 @@ public class QLearningAgent implements LearningAgent {
 
     private QState getCurrentState() {
 
-        int[] s = new int[10];
+        int[] s = new int[nrStates];
         s[0] = marioState[1]; // Small, big or fire
         s[1] = calculateDirection(); // Direction expressed as an integer
         s[2] = marioState[2]; // On ground?
@@ -302,12 +302,7 @@ public class QLearningAgent implements LearningAgent {
 //            System.out.println("test");
 //        }
 
-        float reward;
-        if (prevS == null) {
-            reward = getReward(newState);
-        } else {
-            reward = getReward(prevS);
-        }
+        float reward = getReward(prevS);
 
         QActions actions;
         if (!QTable.containsKey(newState)) {
@@ -325,19 +320,18 @@ public class QLearningAgent implements LearningAgent {
             newAction = actions.getBestAction();
         }
 
-        float newQ = 0;
 
-        if (prevS != null) {
-            float maxQ = actions.getQ(newAction);
-            newQ = (1 - alpha) * oldQ + alpha * (reward + gamma * maxQ);
-            QActions prevActions = QTable.get(prevS);
-            prevA.Q = newQ;
-            prevActions.replaceAction(prevA);
-        }
+        float maxQ = actions.getQ(newAction);
+        float newQ = (1 - alpha) * oldQ + alpha * (reward + gamma * maxQ);
+        QActions prevActions = QTable.get(prevS);
+        prevA.Q = newQ;
+        prevActions.replaceAction(prevA);
+
+        QTable.replace(prevS, prevActions);
 
 
         oldQ = newQ;
-        prevS = new QState(newState);
+        prevS = newState;
         prevA = newAction;
         prevMarioFloatPos = marioFloatPos.clone();
         prevEnemiesFloatPos = enemiesFloatPos.clone();
@@ -510,6 +504,8 @@ public class QLearningAgent implements LearningAgent {
     private class QActions {
 
         ArrayList<QAction> actions;
+        //        boolean actions[];
+        int actionIndex;
 
         float[] qValues;
 
