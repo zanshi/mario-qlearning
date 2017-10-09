@@ -50,7 +50,7 @@ public class BasicTask implements Task
 protected final static Environment environment = MarioEnvironment.getInstance();
 private Agent agent;
 protected MarioAIOptions options;
-private long COMPUTATION_TIME_BOUND = 42; // stands for prescribed  FPS 24.
+private long COMPUTATION_TIME_BOUND = 300; // stands for prescribed  FPS 24.
 private String name = getClass().getSimpleName();
 private EvaluationInfo evaluationInfo;
 
@@ -81,8 +81,10 @@ public boolean runSingleEpisode(final int repetitionsOfSingleEpisode)
                 agent.giveIntermediateReward(environment.getIntermediateReward());
 
                 boolean[] action = agent.getAction();
-                if (System.currentTimeMillis() - c > COMPUTATION_TIME_BOUND)
-                    return false;
+//                if (System.currentTimeMillis() - c > COMPUTATION_TIME_BOUND) {
+//                    System.out.println("time out");
+//                    return false;
+//                }
 //                System.out.println("action = " + Arrays.toString(action));
 //            environment.setRecording(GlobalOptions.isRecording);
                 environment.performAction(action);
