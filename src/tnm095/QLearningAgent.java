@@ -111,6 +111,27 @@ public class QLearningAgent implements LearningAgent {
 
     }
 
+    private boolean isGround(int x, int y) {
+        switch (levelScene[y][x]) {
+            case GeneralizerLevelScene.BRICK:
+            case GeneralizerLevelScene.BORDER_CANNOT_PASS_THROUGH:
+            case GeneralizerLevelScene.FLOWER_POT_OR_CANNON:
+            case GeneralizerLevelScene.LADDER:
+            case GeneralizerLevelScene.BORDER_HILL:
+                return true;
+        }
+        return false;
+    }
+
+    private int getDistanceToGround(int x) {
+        for (int y = marioEgoRow + 1; y < levelScene.length; y++) {
+            if (isGround(x, y)) {
+                return Math.min(3, y - marioEgoRow - 1);
+            }
+        }
+        return -1;
+    }
+
     private int enemiesInFront() {
 
         for (int i = 0; i < 3; i++) {
