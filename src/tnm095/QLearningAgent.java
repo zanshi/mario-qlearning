@@ -117,18 +117,39 @@ public class QLearningAgent implements LearningAgent {
 
     }
 
-//    private int enemiesInFront() {
-//
-//        for (int i = 0; i < 3; i++) {
-//            for (int j = -4; j < 5; j++) {
-//                if (getEnemiesCellValue(marioEgoRow + j, marioEgoCol + i) != 0) {
-//                    return 1;
-//                }
-//            }
-//        }
-//
-//        return 0;
-//    }
+    private boolean isGround(int x, int y) {
+        switch (levelScene[y][x]) {
+            case GeneralizerLevelScene.BRICK:
+            case GeneralizerLevelScene.BORDER_CANNOT_PASS_THROUGH:
+            case GeneralizerLevelScene.FLOWER_POT_OR_CANNON:
+            case GeneralizerLevelScene.LADDER:
+            case GeneralizerLevelScene.BORDER_HILL:
+                return true;
+        }
+        return false;
+    }
+
+    private int getDistanceToGround(int x) {
+        for (int y = marioEgoRow + 1; y < levelScene.length; y++) {
+            if (isGround(x, y)) {
+                return Math.min(3, y - marioEgoRow - 1);
+            }
+        }
+        return -1;
+    }
+
+    private int enemiesInFront() {
+
+        for (int i = 0; i < 3; i++) {
+            for (int j = -4; j < 5; j++) {
+                if (getEnemiesCellValue(marioEgoRow + j, marioEgoCol + i) != 0) {
+                    return 1;
+                }
+            }
+        }
+
+        return 0;
+    }
 
     // TODO: Tweak weights
     // Reward function. Weighted value based on the input state.
