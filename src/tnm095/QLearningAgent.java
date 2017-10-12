@@ -20,8 +20,8 @@ public class QLearningAgent implements LearningAgent {
 
     // Q-learning
     public static final Random random = new Random();
-    private final int nrStates = 13;
-    private final int nrActions = 32;
+    private final int nrStates = 14;
+    private final int nrActions = 12;
     private boolean debugEnabled = false;
     protected byte[][] enemies;
     protected byte[][] mergedObservation;
@@ -61,6 +61,7 @@ public class QLearningAgent implements LearningAgent {
     private int nrStuckFrames;
     private int killsWithFire;
     private int prevKillsWithFire;
+    private int prevElevation;
 
     // -----------------------------------------------
     // Ctor
@@ -69,7 +70,7 @@ public class QLearningAgent implements LearningAgent {
         QTable = new HashMap<>();
         alpha0 = 0.8f;
         alpha = 0.8f;
-        gamma = 0.7f;
+        gamma = 0.6f;
         rho = 0.3f;
 
         actionList = buildKeyCombinations();
@@ -105,28 +106,38 @@ public class QLearningAgent implements LearningAgent {
 //        } else {
 //            s[10] = 0; // Slow
 //        }
-        s[10] = Math.max(0, Math.min(5, Math.round(dx)));
+//        s[10] = Math.max(0, Math.min(5, (int)(dx/2)));
+        s[10] = (int) (dx / 2.0f);
         s[11] = prevMarioMode > marioState[1] ? 1 : 0; // Took damage last frame?
         s[12] = (killsWithStomp - prevKillsWithStomp) > 0 ? 1 : 0;
 //        s[13] = (killsWithFire - prevKillsWithFire) > 0 ? 1 : 0;
 //        s[13] = enemiesInFront();
 //        s[13] = dy < -5 ? 1 : 0; // reward going up
 
+        int elevation = Math.max(0, getDistanceToGround(marioEgoCol - 1) - getDistanceToGround(marioEgoCol));
+
+        s[13] = Math.max(0, elevation - prevElevation);
+
+        prevElevation = elevation;
 
         return new QState(s);
 
     }
 
     private boolean isGround(int x, int y) {
-        switch (levelScene[y][x]) {
-            case GeneralizerLevelScene.BRICK:
-            case GeneralizerLevelScene.BORDER_CANNOT_PASS_THROUGH:
-            case GeneralizerLevelScene.FLOWER_POT_OR_CANNON:
-            case GeneralizerLevelScene.LADDER:
-            case GeneralizerLevelScene.BORDER_HILL:
-                return true;
-        }
-        return false;
+
+        int val = filterObstacle(getReceptiveFieldCellValue(y, x));
+
+        return val == 1;
+//        switch (levelScene[y][x]) {
+//            case GeneralizerLevelScene.BRICK:
+//            case GeneralizerLevelScene.BORDER_CANNOT_PASS_THROUGH:
+//            case GeneralizerLevelScene.FLOWER_POT_OR_CANNON:
+//            case GeneralizerLevelScene.LADDER:
+//            case GeneralizerLevelScene.BORDER_HILL:
+//                return true;
+//        }
+//        return false;
     }
 
     private int getDistanceToGround(int x) {
@@ -166,6 +177,7 @@ public class QLearningAgent implements LearningAgent {
         boolean goingFast = rawState[10] == 2;
         boolean goingMedium = rawState[10] == 1;
         int distance = rawState[10];
+        int elevation = rawState[13];
         int dir = rawState[1];
         boolean goingForward = dir == 5 || dir == 6 || dir == 7;
         boolean goingStraight = dir == 6;
@@ -269,7 +281,8 @@ public class QLearningAgent implements LearningAgent {
 //            reward += enemyScaler * 4;
 //        }
 
-        reward += enemyScaler * distance;
+        reward += enemyScaler * distance * 2;
+        reward += enemyScaler * elevation * 8;
 
         // Reward kills in general
         if (killedEnemy && !killedEnemyWithStomp) {
@@ -431,7 +444,7 @@ public class QLearningAgent implements LearningAgent {
 
 
 //        return (dx * dx + dy * dy < 0.001f);
-        if (Math.abs(dx) < 1.f) {
+        if (Math.abs(dx) < 2.5f) {
             nrStuckFrames++;
         } else {
             nrStuckFrames = 0;
@@ -451,7 +464,7 @@ public class QLearningAgent implements LearningAgent {
         }
 
         if (nrStuckFrames > 24) {
-            nrStuckFrames = 0;
+//            nrStuckFrames = 0;
             return true;
         } else {
             return false;
@@ -499,14 +512,66 @@ public class QLearningAgent implements LearningAgent {
     private ArrayList<boolean[]> buildKeyCombinations() {
         ArrayList<boolean[]> keyCombinations = new ArrayList<>();
 
-        int n = Environment.numberOfKeys;
+//        int n = Environment.numberOfKeys;
+//
+//        for (int x = 0; x < nrActions; x++) {
+//            boolean[] b = new boolean[n - 1];
+//            for (int i = 0; i < n - 1; i++) b[i] = (1 << n - 1 - i - 1 & x) != 0;
+//            boolean[] b2 = Arrays.copyOf(b, 6);
+//            keyCombinations.add(b2);
+//        }
+        boolean nothing[] = new boolean[6];
 
-        for (int x = 0; x < nrActions; x++) {
-            boolean[] b = new boolean[n - 1];
-            for (int i = 0; i < n - 1; i++) b[i] = (1 << n - 1 - i - 1 & x) != 0;
-            boolean[] b2 = Arrays.copyOf(b, 6);
-            keyCombinations.add(b2);
-        }
+        boolean left[] = new boolean[6];
+        left[Mario.KEY_LEFT] = true;
+        boolean right[] = new boolean[6];
+        right[Mario.KEY_RIGHT] = true;
+        boolean jump[] = new boolean[6];
+        jump[Mario.KEY_JUMP] = true;
+        boolean fire[] = new boolean[6];
+        fire[Mario.KEY_SPEED] = true;
+
+        boolean left_jump[] = new boolean[6];
+        left_jump[Mario.KEY_LEFT] = true;
+        left_jump[Mario.KEY_JUMP] = true;
+        boolean right_jump[] = new boolean[6];
+        right_jump[Mario.KEY_RIGHT] = true;
+        right_jump[Mario.KEY_JUMP] = true;
+
+        boolean left_fire[] = new boolean[6];
+        left_fire[Mario.KEY_LEFT] = true;
+        left_fire[Mario.KEY_SPEED] = true;
+
+        boolean right_fire[] = new boolean[6];
+        right_fire[Mario.KEY_LEFT] = true;
+        right_fire[Mario.KEY_SPEED] = true;
+
+        boolean jump_fire[] = new boolean[6];
+        jump_fire[Mario.KEY_JUMP] = true;
+        jump_fire[Mario.KEY_SPEED] = true;
+
+        boolean left_jump_fire[] = new boolean[6];
+        left_jump_fire[Mario.KEY_JUMP] = true;
+        left_jump_fire[Mario.KEY_SPEED] = true;
+        left_jump_fire[Mario.KEY_LEFT] = true;
+
+        boolean right_jump_fire[] = new boolean[6];
+        right_jump_fire[Mario.KEY_JUMP] = true;
+        right_jump_fire[Mario.KEY_SPEED] = true;
+        right_jump_fire[Mario.KEY_RIGHT] = true;
+
+        keyCombinations.add(nothing);
+        keyCombinations.add(left);
+        keyCombinations.add(right);
+        keyCombinations.add(jump);
+        keyCombinations.add(fire);
+        keyCombinations.add(left_jump);
+        keyCombinations.add(right_jump);
+        keyCombinations.add(left_fire);
+        keyCombinations.add(right_fire);
+        keyCombinations.add(jump_fire);
+        keyCombinations.add(left_jump_fire);
+        keyCombinations.add(right_jump_fire);
 
         return keyCombinations;
 
@@ -614,6 +679,7 @@ public class QLearningAgent implements LearningAgent {
         prevKillsTotal = 0;
         prevKillsWithStomp = 0;
         prevKillsWithFire = 0;
+        prevElevation = 0;
 
 
         prevMarioFloatPos = new float[2];
@@ -639,7 +705,7 @@ public class QLearningAgent implements LearningAgent {
     @Override
     public void learn() {
 
-        int N = 600;
+        int N = 3000;
         int totalScore = 0;
         int score = 0;
         int wins = 0;
@@ -782,9 +848,9 @@ public class QLearningAgent implements LearningAgent {
 
         QActions() {
             qValues = new float[nrActions];
-//            for (int i = 0; i < nrActions; i++) {
-//                qValues[i] = (0.1f * random.nextFloat() - 0.05f) * 2.0f;
-//            }
+            for (int i = 0; i < nrActions; i++) {
+                qValues[i] = (random.nextFloat() * 0.2f - 0.1f);
+            }
             nrTimesActionPerformed = new int[nrActions];
         }
 
