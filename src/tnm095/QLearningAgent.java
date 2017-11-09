@@ -24,16 +24,15 @@ public class QLearningAgent implements LearningAgent {
     private final int nrActions = 12;
     private boolean debugEnabled = false;
     protected byte[][] enemies;
-    protected byte[][] mergedObservation;
+    private byte[][] mergedObservation;
     // -----------------------------------------------
     // Member variables
 
     protected float[] marioFloatPos;
     protected float[] enemiesFloatPos;
     protected int[] marioState = null;
-    int zLevelScene = 2;
-    int zLevelEnemies = 2;
-    //    QStateAction oldQStateAction;
+    private int zLevelScene = 2;
+    private int zLevelEnemies = 2;
     // Mario AI
     private int receptiveFieldWidth;
     private int receptiveFieldHeight;
@@ -62,6 +61,9 @@ public class QLearningAgent implements LearningAgent {
     private int killsWithFire;
     private int prevKillsWithFire;
     private int prevElevation;
+    private int marioX;
+    private int prevMarioX;
+    private boolean hasStarted;
 
     // -----------------------------------------------
     // Ctor
@@ -69,8 +71,8 @@ public class QLearningAgent implements LearningAgent {
         setName("Q-Learning Agent");
         QTable = new HashMap<>();
         alpha0 = 0.8f;
-        alpha = 0.8f;
-        gamma = 0.6f;
+        alpha = 0.15f;
+        gamma = 0.62f;
         rho = 0.3f;
 
         actionList = buildKeyCombinations();
@@ -85,38 +87,26 @@ public class QLearningAgent implements LearningAgent {
         float dy = marioFloatPos[1] - prevMarioFloatPos[1];
 
         int[] s = new int[nrStates];
-        s[0] = marioState[1]; // Small, big or fire
+        s[0] = (marioState[1] == 0 || marioState[1] == 1) ? 1 : 0; // Small, big or fire
         s[1] = calculateDirection(dx, dy); // Direction expressed as an integer
         s[2] = marioState[2]; // On ground?
         s[3] = (marioState[3] == 1 || marioState[2] == 0) ? 1 : 0; // Able to jump?
         s[4] = nearbyDanger();
-        s[5] = isStuck() ? 1 : 0;
-//        s[5] = 0;
+        s[5] = 0;
         s[6] = nearbyObstacle();
         s[7] = midrangeEnemies();
         s[8] = longRangeEnemies();
         s[9] = (killsTotal - prevKillsTotal) > 0 ? 1 : 0; // killed something previous frame
 
-//        int distance = (int) dx / 2;
-
-//        if (dx > 4.f || (dx > 3.f && dy < -5)) {
-//            s[10] = 2; // Going fast
-//        } else if (dx > 2.f || (dx > 1.f && dy < -3)) {
-//            s[10] = 1; // Medium speed
-//        } else {
-//            s[10] = 0; // Slow
-//        }
-//        s[10] = Math.max(0, Math.min(5, (int)(dx/2)));
-        s[10] = (int) (dx / 2.0f);
+        int distance = marioX - prevMarioX;
+        distance = Math.max(-2, Math.min(2, distance));
+        s[10] = Math.abs(distance) < 2 ? 0 : distance / 2;
         s[11] = prevMarioMode > marioState[1] ? 1 : 0; // Took damage last frame?
         s[12] = (killsWithStomp - prevKillsWithStomp) > 0 ? 1 : 0;
-//        s[13] = (killsWithFire - prevKillsWithFire) > 0 ? 1 : 0;
-//        s[13] = enemiesInFront();
-//        s[13] = dy < -5 ? 1 : 0; // reward going up
 
         int elevation = Math.max(0, getDistanceToGround(marioEgoCol - 1) - getDistanceToGround(marioEgoCol));
-
-        s[13] = Math.max(0, elevation - prevElevation);
+        int dElevation = Math.max(0, elevation - prevElevation);
+        s[13] = dElevation;
 
         prevElevation = elevation;
 
@@ -129,15 +119,6 @@ public class QLearningAgent implements LearningAgent {
         int val = filterObstacle(getReceptiveFieldCellValue(y, x));
 
         return val == 1;
-//        switch (levelScene[y][x]) {
-//            case GeneralizerLevelScene.BRICK:
-//            case GeneralizerLevelScene.BORDER_CANNOT_PASS_THROUGH:
-//            case GeneralizerLevelScene.FLOWER_POT_OR_CANNON:
-//            case GeneralizerLevelScene.LADDER:
-//            case GeneralizerLevelScene.BORDER_HILL:
-//                return true;
-//        }
-//        return false;
     }
 
     private int getDistanceToGround(int x) {
@@ -149,20 +130,6 @@ public class QLearningAgent implements LearningAgent {
         return -1;
     }
 
-    private int enemiesInFront() {
-
-        for (int i = 0; i < 3; i++) {
-            for (int j = -4; j < 5; j++) {
-                if (getEnemiesCellValue(marioEgoRow + j, marioEgoCol + i) != 0) {
-                    return 1;
-                }
-            }
-        }
-
-        return 0;
-    }
-
-    // TODO: Tweak weights
     // Reward function. Weighted value based on the input state.
     private float getReward(QState state) {
 
@@ -172,114 +139,19 @@ public class QLearningAgent implements LearningAgent {
         boolean enemiesNearby = rawState[4] != -1;
         boolean enemiesMid = rawState[7] != -1;
         boolean enemiesFar = rawState[8] != -1;
-        boolean anyEnemies = enemiesMid || enemiesFar;
-//        boolean enemiesInFront = rawState[4] == 5;
-        boolean goingFast = rawState[10] == 2;
-        boolean goingMedium = rawState[10] == 1;
         int distance = rawState[10];
         int elevation = rawState[13];
-        int dir = rawState[1];
-        boolean goingForward = dir == 5 || dir == 6 || dir == 7;
-        boolean goingStraight = dir == 6;
-        boolean goingBackStraight = dir == 2;
-        boolean goingBackwards = dir == 1 || dir == 2 || dir == 3;
         boolean killedEnemy = rawState[9] == 1;
         boolean killedEnemyWithStomp = rawState[12] == 1;
-        boolean marioStuck = rawState[5] == 1;
+//        boolean marioStuck = rawState[5] == 1;
         boolean marioTookDamage = rawState[11] == 1;
-//        boolean killedEnemyWithFire = rawState[13] == 1;
-
-
-//        if (!anyEnemies) {
-//            if (goingForward) {
-//                reward += 10;
-//            }
-//        } else {
-//            if (goingForward) {
-//                reward += 1;
-//            }
-//        }
-//
-//        if (goingFast) {
-//            reward += 4;
-//        } else if (goingMedium) {
-//            reward += 3;
-//        }
-//
-//        if (killedEnemyWithStomp) {
-//            reward += 20;
-//        }
-//
-//        if (goingBackwards) {
-//            reward -= 5;
-//        }
-
-//        if (marioTookDamage) {
-//            reward -= 100;
-//        }
-
-//        if (marioStuck) {
-//            reward -= 10;
-//        }
-
-
-//        if (!enemiesMid && !marioStuck) {
-//            // Reward going fast
-//            if (goingFast) {
-//                reward += 0.8;
-//            } else if (goingMedium) {
-//                reward += 0.5;
-//            }
-//
-//            if (goingForward) { // moving forward
-//                reward += 0.6;
-//            } else if (goingBackwards) { // moving backwards
-//                reward += -0.3;
-//            }
-//        } else {
-//            if (goingForward && !marioStuck) {
-//                reward += 0.3;
-//            }
-//        }
-
-//        // Punish going fast when enemies are nearby
-//        if (enemiesInFront && goingStraight) {
-//            reward -= 1.5f;
-//        }
-//
-//        if (enemiesInFront && goingBackStraight) {
-//            reward += 0.3f;
-//        }
-//
-//        if (enemiesNearby && goingBackStraight) {
-//            reward -= 0.7f;
-//        }
-
-//         Punish going into enemies
-//        if (enemiesNearby && goingForward) {
-//            reward -= 3.0f;
-//        }
-
-//        if (goingForward) {
-//            reward += 2;
-//        } else if (goingBackwards) {
-//            reward -= 1;
-//        }
 
         float enemyScaler = 1;
         if (enemiesNearby || enemiesMid) {
-            enemyScaler = 0;
+            enemyScaler = 0f;
         } else if (enemiesFar) {
             enemyScaler = 0.15f;
         }
-
-//        if (goingForward) {
-//            reward += enemyScaler * 4;
-//        }
-
-//        if (goingMedium) {
-//            reward += enemyScaler * 4;
-//        }
 
         reward += enemyScaler * distance * 2;
         reward += enemyScaler * elevation * 8;
@@ -289,28 +161,20 @@ public class QLearningAgent implements LearningAgent {
             reward += 60;
         }
 
-//         Reward stomp kills extra
+//      Reward stomp kills extra
         if (killedEnemyWithStomp) {
-            reward += 60;
+            reward += 40;
         }
 
-//         Punish being stuck
-//        if (marioStuck && goingBackwards && !enemiesNearby) {
-//            System.out.println("stuck!");
-//            reward += 0.5f;
+//      Punish being stuck
+//        if (marioStuck) {
+//            reward -= 20;
 //        }
-        if (marioStuck) {
-            reward -= 20;
-        }
 
-//         Punish getting hit
+//      Punish getting hit
         if (marioTookDamage) {
 //            System.out.println1"Took damage");
-            reward -= 800;
-        }
-
-        if (debugEnabled) {
-            System.out.println("Reward: " + reward);
+            reward -= 15000;
         }
 
         return reward;
@@ -328,15 +192,16 @@ public class QLearningAgent implements LearningAgent {
         // 6: East
         // 7: South east
         // 8: South
-//
-//        if (prevMarioFloatPos == null || (Arrays.equals(prevMarioFloatPos, marioFloatPos))) {
-//            return 0; // Still
-//        }
-//
-//        float dx = marioFloatPos[0] - prevMarioFloatPos[0];
-//        float dy = marioFloatPos[1] - prevMarioFloatPos[1];
 
-        float epsilon = 0.00001f;
+        if (Math.abs(dx) < 0.5) {
+            dx = 0;
+        }
+
+        if (Math.abs(dy) < 0.5) {
+            dy = 0;
+        }
+
+        float epsilon = 0.000001f;
 
         if (dx < -epsilon && dy > epsilon) {
             return 1;
@@ -367,19 +232,6 @@ public class QLearningAgent implements LearningAgent {
     }
 
     private int nearbyDanger() {
-//        return (getReceptiveFieldCellValue(marioEgoRow + 2, marioEgoCol + 1) == 0 &&
-//                getReceptiveFieldCellValue(marioEgoRow + 1, marioEgoCol + 1) == 0) ||
-//                getReceptiveFieldCellValue(marioEgoRow, marioEgoCol + 1) != 0 ||
-//                getReceptiveFieldCellValue(marioEgoRow, marioEgoCol + 2) != 0 ||
-//        return getEnemiesCellValue(marioEgoRow, marioEgoCol + 1) != 0 ||
-//                getEnemiesCellValue(marioEgoRow - 1, marioEgoCol + 1) != 0 ||
-//                getEnemiesCellValue(marioEgoRow - 2, marioEgoCol + 1) != 0 ||
-//                getEnemiesCellValue(marioEgoRow + 1, marioEgoCol + 1) != 0 ||
-//                getEnemiesCellValue(marioEgoRow + 2, marioEgoCol + 1) != 0;
-
-//        return getEnemiesCellValue(marioEgoRow - 1, marioEgoCol + 1) != 0 ||
-//                getEnemiesCellValue(marioEgoRow, marioEgoCol + 1) != 0;
-
         return checkEnemies(-1, 1, -1, 1);
 
     }
@@ -387,7 +239,6 @@ public class QLearningAgent implements LearningAgent {
     private int midrangeEnemies() {
 
         return checkEnemies(-3, 3, -3, 3);
-
     }
 
     private int longRangeEnemies() {
@@ -399,14 +250,12 @@ public class QLearningAgent implements LearningAgent {
         int result = 0;
         boolean directions[] = new boolean[9];
         Arrays.fill(directions, false);
-        boolean anyEnemy = false;
 
         y0 = marioState[1] == 1 ? y0 - 1 : y0;
 
         for (int i = x0; i <= x1; i++) {
             for (int j = y0; j <= y1; j++) {
                 if (getEnemiesCellValue(marioEgoRow + j, marioEgoCol + i) != 0) {
-                    anyEnemy = true;
                     int dir = calculateDirection(i, j);
                     if (!directions[dir]) {
                         result += Math.pow(2, dir);
@@ -416,19 +265,7 @@ public class QLearningAgent implements LearningAgent {
             }
         }
 
-
-        if (anyEnemy) {
-//            if (debugEnabled) {
-//                System.out.println(result);
-//            }
-            return result;
-        } else {
-//            if (debugEnabled) {
-//                System.out.println(-1);
-//            }
-            return -1;
-        }
-
+        return result == 0 ? -1 : result;
 
     }
 
@@ -437,38 +274,15 @@ public class QLearningAgent implements LearningAgent {
 
         // Calculate delta distance
         double dx = marioFloatPos[0] - prevMarioFloatPos[0];
-//        System.out.println(dx);
-//        System.out.println(marioFloatPos[0]);
-//        System.out.println(prevMarioFloatPos[0]);
         float dy = marioFloatPos[1] - prevMarioFloatPos[1];
 
-
-//        return (dx * dx + dy * dy < 0.001f);
         if (Math.abs(dx) < 2.5f) {
             nrStuckFrames++;
         } else {
             nrStuckFrames = 0;
         }
 
-//        if (nrStuckFrames > 48) {
-//            System.out.println(nrStuckFrames);
-//        }
-
-        if (debugEnabled) {
-
-//            System.out.println("dx = " + dx + ", dy = " + dy);
-
-            if (nrStuckFrames > 24) {
-                System.out.println(nrStuckFrames);
-            }
-        }
-
-        if (nrStuckFrames > 24) {
-//            nrStuckFrames = 0;
-            return true;
-        } else {
-            return false;
-        }
+        return nrStuckFrames > 24;
 
     }
 
@@ -477,25 +291,13 @@ public class QLearningAgent implements LearningAgent {
         int ob2 = getReceptiveFieldCellValue(marioEgoRow - 1, marioEgoCol + 1);
         int ob3 = getReceptiveFieldCellValue(marioEgoRow, marioEgoCol + 1);
         int ob4 = getReceptiveFieldCellValue(marioEgoRow + 1, marioEgoCol + 1);
-        int ob5 = getReceptiveFieldCellValue(marioEgoRow + 2, marioEgoCol + 1);
-
 
         ob1 = filterObstacle(ob1);
         ob2 = filterObstacle(ob2);
         ob3 = filterObstacle(ob3);
         ob4 = filterObstacle(ob4);
-        ob5 = filterObstacle(ob5);
 
-        if (debugEnabled) {
-//            System.out.println("Test");
-//            System.out.println(ob1);
-//            System.out.println(ob2);
-//            System.out.println(ob3);
-//            System.out.println(ob4);
-        }
-
-
-        return ob1 + 2 * ob2 + 4 * ob3 + 8 * ob4 + 16 * ob5;
+        return ob1 + 2 * ob2 + 4 * ob3 + 8 * ob4;
     }
 
     private int filterObstacle(int obj) {
@@ -511,15 +313,6 @@ public class QLearningAgent implements LearningAgent {
 
     private ArrayList<boolean[]> buildKeyCombinations() {
         ArrayList<boolean[]> keyCombinations = new ArrayList<>();
-
-//        int n = Environment.numberOfKeys;
-//
-//        for (int x = 0; x < nrActions; x++) {
-//            boolean[] b = new boolean[n - 1];
-//            for (int i = 0; i < n - 1; i++) b[i] = (1 << n - 1 - i - 1 & x) != 0;
-//            boolean[] b2 = Arrays.copyOf(b, 6);
-//            keyCombinations.add(b2);
-//        }
         boolean nothing[] = new boolean[6];
 
         boolean left[] = new boolean[6];
@@ -578,7 +371,6 @@ public class QLearningAgent implements LearningAgent {
     }
 
 
-    // TODO
     @Override
     public void integrateObservation(Environment environment) {
         // Update environment information
@@ -594,8 +386,11 @@ public class QLearningAgent implements LearningAgent {
         this.killsWithFire = environment.getKillsByFire();
         this.killsTotal = environment.getKillsTotal();
 
+        this.marioX = environment.getEvaluationInfo().distancePassedPhys;
+
         // ----------------
         // Q-learning
+
 
         QState newState = getCurrentState(); // New state
 
@@ -624,11 +419,7 @@ public class QLearningAgent implements LearningAgent {
             float oldQ = prevActions.getQ(prevActionIdx);
             float maxQ = actions.getQ(actionIdx);
             int i = prevActions.nrTimesActionPerformed[prevActionIdx];
-//            float scale = (float) Math.exp(-i * Math.E / 200);
             float alphaTest = alpha0 / i;
-//            float alphaTest = 0.01f + alpha0 * scale;
-//            System.out.println(alphaTest);
-//            float alphaTest = alpha;
             float newQ = (1 - alphaTest) * oldQ + alphaTest * (reward + gamma * maxQ);
             prevActions.setQ(prevActionIdx, newQ);
         }
@@ -641,6 +432,9 @@ public class QLearningAgent implements LearningAgent {
         prevKillsWithStomp = killsWithStomp;
         prevKillsWithFire = killsWithFire;
         prevMarioMode = marioState[1];
+
+        prevMarioX = marioX;
+
 
     }
 
@@ -658,7 +452,6 @@ public class QLearningAgent implements LearningAgent {
         marioEgoCol = egoCol;
     }
 
-    // TODO
     @Override
     public boolean[] getAction() {
         if (prevActionIdx == -1) {
@@ -668,9 +461,13 @@ public class QLearningAgent implements LearningAgent {
         }
     }
 
-    // TODO
     @Override
     public void reset() {
+
+        hasStarted = false;
+
+        marioX = 0;
+        prevMarioX = 0;
 
         killsWithStomp = 0;
         killsWithFire = 0;
@@ -700,60 +497,59 @@ public class QLearningAgent implements LearningAgent {
 
     /**
      * Build the Q-table
-     * TODO
      */
     @Override
     public void learn() {
 
-        int N = 3000;
+        ArrayList<Float> intervalWinsPercentage = new ArrayList<>();
+        int N = 5000;
         int totalScore = 0;
         int score = 0;
         int wins = 0;
         int lateWins = 0;
         int nDeaths = 0;
         int nTimesup = 0;
-        for (int i = 1; i < N; i++) {
-//            if (i == 2900) {
-//                alpha0 = 0;
-//                rho = 0.01f;
-//            }
-//            float scale = (float) Math.exp(i * Math.E / 1000);
-//            alpha = 0.1f + 0.7f * scale;
-//            gamma = Math.min(0.62f, 0.1f * scale);
-//            if (alpha > 0.01) {
-//                alpha -= 1.0f / (N / 2);
-//            }
-//            if (rho > 0.1) {
-//                rho -= 1.0f / (N / 4);
-//            }
-//            System.out.println(rho);
+//        int avgDistanceCleared = 0;
+        int iter = 0;
+        int iterWins = 0;
+        int interval = 500;
+        for (int i = 1; i < N; i++, iter++) {
             score = task.evaluate(this);
             totalScore += score;
             EvaluationInfo eval = task.getEvaluationInfo();
             System.out.print("Iteration " + i + ", Score: " + score + ", QTable Size: " + QTable.size() + ", ");
+            System.out.print("Cleared " + eval.distancePassedCells + " cells, ");
             if (eval.marioStatus == Mario.STATUS_WIN) {
                 wins++;
-                if (i > N - 100) {
-                    lateWins++;
-                }
+                iterWins++;
                 //System.out.print("Mario won!");
             } else if (eval.timeLeft == 0) {
                 nTimesup++;
                 //System.out.print("Time's up! Mario reached " + eval.distancePassedCells);
             } else {
                 nDeaths++;
-//                giveReward(-5.0f);
+//                avgDistanceCleared += eval.distancePassedCells;
                 //System.out.print("RIP Mario 2017. Time left: " + eval.timeLeft);
             }
-            System.out.println("Wins: " + 100.f * (float) wins / (float) (i + 1)
-                    + "%, Deaths: " + 100.f * (float) nDeaths / (float) (i + 1)
-                    + "%, Times up: " + 100.f * (float) nTimesup / (float) (i + 1) + "%");
+            if (iter == interval) {
+                intervalWinsPercentage.add((float) iterWins / (float) interval);
+                iter = 0;
+                iterWins = 0;
+            }
+            System.out.println("Wins: " + 100.f * (float) wins / (float) i
+                    + "%, Deaths: " + 100.f * (float) nDeaths / (float) i
+                    + "%, Times up: " + 100.f * (float) nTimesup / (float) i + "%");
 
         }
 
         System.out.println("Percentage won: " + (float) wins / (float) N);
         System.out.println("Percentage won late: " + (float) lateWins / (float) 100);
         System.out.println("Total score across all runs: " + totalScore);
+//        System.out.println("Avg distance when timeout: " + avgDistanceCleared / nDeaths);
+
+        for (float f : intervalWinsPercentage) {
+            System.out.println(f);
+        }
 
 
     }
@@ -763,7 +559,6 @@ public class QLearningAgent implements LearningAgent {
 
     }
 
-    // TODO
     @Override
     public void newEpisode() {
         task = null;
@@ -783,24 +578,25 @@ public class QLearningAgent implements LearningAgent {
     @Override
     public Agent getBestAgent() {
 //        alpha0 = 0;
+//        alpha = 0;
         rho = 0.01f;
-        debugEnabled = true;
+//        debugEnabled = true;
         return this;
     }
 
     @Override
     public void init() {
-
+        reset();
     }
 
-    public int getEnemiesCellValue(int x, int y) {
+    private int getEnemiesCellValue(int x, int y) {
         if (x < 0 || x >= levelScene.length || y < 0 || y >= levelScene[0].length)
             return 0;
 
         return enemies[x][y];
     }
 
-    public int getReceptiveFieldCellValue(int x, int y) {
+    private int getReceptiveFieldCellValue(int x, int y) {
         if (x < 0 || x >= levelScene.length || y < 0 || y >= levelScene[0].length)
             return 0;
 
@@ -849,12 +645,12 @@ public class QLearningAgent implements LearningAgent {
         QActions() {
             qValues = new float[nrActions];
             for (int i = 0; i < nrActions; i++) {
-                qValues[i] = (random.nextFloat() * 0.2f - 0.1f);
+                qValues[i] = (random.nextFloat() * 2.f - 1.f);
             }
             nrTimesActionPerformed = new int[nrActions];
         }
 
-        public int getBestAction() {
+        int getBestAction() {
 
             float maxQ = Float.NEGATIVE_INFINITY;
             float Q;
@@ -870,17 +666,17 @@ public class QLearningAgent implements LearningAgent {
             return bestIdx;
         }
 
-        public float getQ(int idx) {
+        float getQ(int idx) {
             return qValues[idx];
         }
 
 
-        public void setQ(int idx, float newQ) {
+        void setQ(int idx, float newQ) {
             qValues[idx] = newQ;
         }
 
 
-        public int getRandomAction() {
+        int getRandomAction() {
             int rndIdx = random.nextInt(nrActions);
             nrTimesActionPerformed[rndIdx]++;
             return rndIdx;

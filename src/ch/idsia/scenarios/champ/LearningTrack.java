@@ -71,6 +71,7 @@ private static int evaluateSubmission(MarioAIOptions marioAIOptions, LearningAge
     marioAIOptions.setVisualization(true);
     System.out.println("LearningTrack best agent = " + agent);
     marioAIOptions.setAgent(agent);
+//    marioAIOptions.setLevelRandSeed(5);
     BasicTask basicTask = new BasicTask(marioAIOptions);
     basicTask.setOptionsAndReset(marioAIOptions);
     System.out.println("basicTask = " + basicTask);
